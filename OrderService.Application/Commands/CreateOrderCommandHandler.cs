@@ -1,27 +1,16 @@
 namespace OrderService.Application.Commands;
-
 using MediatR;
 using OrderService.Application.Clients;
 using OrderService.Domain.Entities;
 using OrderService.Domain.Repositories;
 using OrderService.Domain.ValueObjects;
 
-/// <summary>
-/// Handler MediatR pour CreateOrderCommand.
-/// Orchestre : vérification stock (Refit) → Value Objects → Entité → persistance.
-///
-/// Jour 3 : après persistance, la publication MassTransit est faite
-/// dans la couche Presentation (CreateOrderCommandHandler dans Program.cs)
-/// pour ne pas coupler Application à MassTransit.
-/// </summary>
 public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Guid>
 {
     private readonly IOrderRepository      _orderRepository;
     private readonly IProductServiceClient _productClient;
 
-    public CreateOrderCommandHandler(
-        IOrderRepository      orderRepository,
-        IProductServiceClient productClient)
+    public CreateOrderCommandHandler(IOrderRepository orderRepository, IProductServiceClient productClient)
     {
         _orderRepository = orderRepository ?? throw new ArgumentNullException(nameof(orderRepository));
         _productClient   = productClient   ?? throw new ArgumentNullException(nameof(productClient));
@@ -29,11 +18,11 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Gui
 
     public async Task<Guid> Handle(CreateOrderCommand command, CancellationToken cancellationToken)
     {
-        // 1. Vérification du stock via Refit (appel HTTP vers Product Service)
+        // 1. Vérification du stock via Refit (avec pipeline Polly configuré dans Program.cs)
+        // Le pipeline Fallback → Circuit Breaker → Retry → Timeout s'applique automatiquement
         try
         {
             var stock = await _productClient.GetStockAsync(command.ProductId, cancellationToken);
-
             if (stock.Available < command.Quantity)
                 throw new InvalidOperationException(
                     $"Stock insuffisant pour le produit {command.ProductId}. " +
@@ -45,7 +34,8 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Gui
         }
         catch (HttpRequestException)
         {
-            // Product Service indisponible → dégradé gracieux
+            // Product Service indisponible → le Fallback du pipeline a déjà retourné une réponse dégradée
+            // On continue avec dégradation gracieuse
         }
 
         // 2. Création du Value Object

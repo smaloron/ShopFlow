@@ -11,12 +11,18 @@
     <ProjectReference Include="..\ShopFlow.Contracts\ShopFlow.Contracts.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Swashbuckle.AspNetCore"      Version="6.5.0" />
-    <PackageReference Include="Refit.HttpClientFactory"     Version="7.0.0" />
-    <PackageReference Include="Grpc.Net.Client"             Version="2.60.0" />
-    <PackageReference Include="MassTransit"                 Version="8.2.3" />
-    <PackageReference Include="MassTransit.RabbitMQ"        Version="8.2.3" />
-    <PackageReference Include="Microsoft.AspNetCore.Diagnostics.HealthChecks" Version="2.2.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore"                              Version="6.5.0" />
+    <PackageReference Include="Refit.HttpClientFactory"                             Version="7.0.0" />
+    <PackageReference Include="Grpc.Net.Client"                                     Version="2.60.0" />
+    <PackageReference Include="MassTransit"                                         Version="8.2.3" />
+    <PackageReference Include="MassTransit.RabbitMQ"                               Version="8.2.3" />
+    <!-- LAB 4 — Packages Polly / Résilience -->
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience"               Version="8.10.0" />
+    <PackageReference Include="Microsoft.Extensions.Resilience"                    Version="8.10.0" />
+    <!-- Health Checks -->
+    <PackageReference Include="Microsoft.AspNetCore.Diagnostics.HealthChecks"      Version="2.2.0" />
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks"      Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" Version="8.0.0" />
   </ItemGroup>
   <ItemGroup>
     <Protobuf Include="..\ShopFlow.Payment.Grpc\Protos\payment.proto" GrpcServices="Client" />

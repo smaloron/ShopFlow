@@ -1,9 +1,5 @@
 namespace OrderService.Application.Dtos;
 
-/// <summary>
-/// DTO pour représenter une commande côté API (lecture).
-/// Simplifié par rapport à l'entité Order du Domain.
-/// </summary>
 public class OrderDto
 {
     public Guid Id { get; init; }
@@ -15,7 +11,6 @@ public class OrderDto
     public List<OrderItemDto> Items { get; init; } = new();
 }
 
-/// <summary>DTO pour représenter une ligne de commande</summary>
 public class OrderItemDto
 {
     public Guid Id { get; init; }
@@ -26,11 +21,4 @@ public class OrderItemDto
     public decimal LineTotal { get; init; }
 }
 
-/// <summary>DTO de résumé de commande (sans les items)</summary>
-public record OrderSummaryDto(
-    Guid Id,
-    DateTimeOffset OrderDate,
-    string Status,
-    decimal TotalAmount,
-    string Currency
-);
+public record OrderSummaryDto(Guid Id, DateTimeOffset OrderDate, string Status, decimal TotalAmount, string Currency);
