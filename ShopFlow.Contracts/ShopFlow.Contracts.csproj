@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <!--
+    Projet de contrats partagés.
+    Référencé par tous les services qui produisent ou consomment des événements.
+    NE contient QUE des records de messages — aucune logique métier.
+  -->
+</Project>

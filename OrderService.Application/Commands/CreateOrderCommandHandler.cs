@@ -9,6 +9,10 @@ using OrderService.Domain.ValueObjects;
 /// <summary>
 /// Handler MediatR pour CreateOrderCommand.
 /// Orchestre : vérification stock (Refit) → Value Objects → Entité → persistance.
+///
+/// Jour 3 : après persistance, la publication MassTransit est faite
+/// dans la couche Presentation (CreateOrderCommandHandler dans Program.cs)
+/// pour ne pas coupler Application à MassTransit.
 /// </summary>
 public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Guid>
 {
@@ -41,23 +45,18 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Gui
         }
         catch (HttpRequestException)
         {
-            // Product Service indisponible → on laisse passer (dégradé gracieux)
-            // En production : circuit breaker Polly
+            // Product Service indisponible → dégradé gracieux
         }
 
-        // 2. Création du Value Object (validation métier dans Money)
+        // 2. Création du Value Object
         var unitPrice = new Money(command.UnitPrice, command.Currency);
 
         // 3. Création de l'entité via Factory Method
         var order = Order.Create(command.CustomerId);
-
-        // 4. Ajout des items (règles métier dans Order.AddItem)
         order.AddItem(command.ProductId, command.Quantity, unitPrice);
-
-        // 5. Confirmation (transition d'état + événement OrderPlaced)
         order.Confirm();
 
-        // 6. Persistance (Unit of Work)
+        // 4. Persistance
         await _orderRepository.AddAsync(order, cancellationToken);
         await _orderRepository.SaveChangesAsync(cancellationToken);
 

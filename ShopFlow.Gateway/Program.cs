@@ -1,16 +1,12 @@
 using System.Threading.RateLimiting;
 using Yarp.ReverseProxy.Configuration;
 
-// ── BUILDER ───────────────────────────────────────────────────────────────────
-
 var builder = WebApplication.CreateBuilder(args);
 
-// ── YARP Reverse Proxy ────────────────────────────────────────────────────────
 builder.Services
     .AddReverseProxy()
     .LoadFromMemory(GetRoutes(), GetClusters());
 
-// ── Rate Limiting (100 req/min par défaut) ────────────────────────────────────
 builder.Services.AddRateLimiter(options =>
 {
     options.AddFixedWindowLimiter("api-limit", opt =>
@@ -18,8 +14,6 @@ builder.Services.AddRateLimiter(options =>
         opt.Window      = TimeSpan.FromMinutes(1);
         opt.PermitLimit = 100;
     });
-
-    // Réponse quand la limite est dépassée
     options.OnRejected = async (context, ct) =>
     {
         context.HttpContext.Response.StatusCode = 429;
@@ -28,80 +22,72 @@ builder.Services.AddRateLimiter(options =>
     };
 });
 
-// ── CORS ──────────────────────────────────────────────────────────────────────
 builder.Services.AddCors(options =>
-{
     options.AddDefaultPolicy(policy =>
-        policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
-});
+        policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));
 
-// ── Health Checks ─────────────────────────────────────────────────────────────
 builder.Services.AddHealthChecks();
-
-// ── APP ───────────────────────────────────────────────────────────────────────
 
 var app = builder.Build();
 
-// Middleware de logging des requêtes entrantes
 app.Use(async (context, next) =>
 {
     var requestId = Guid.NewGuid().ToString("N")[..8];
     app.Logger.LogInformation(
         "[Gateway] [{RequestId}] {Method} {Path}",
-        requestId,
-        context.Request.Method,
-        context.Request.Path);
-
+        requestId, context.Request.Method, context.Request.Path);
     await next();
-
     app.Logger.LogInformation(
         "[Gateway] [{RequestId}] → {StatusCode}",
-        requestId,
-        context.Response.StatusCode);
+        requestId, context.Response.StatusCode);
 });
 
 app.UseCors();
 app.UseRateLimiter();
 app.MapHealthChecks("/health");
-
-// Route la requête vers le bon micro-service
 app.MapReverseProxy();
 
 app.Run();
 
-// ── Configuration des Routes ─────────────────────────────────────────────────
-
+// ── Routes ────────────────────────────────────────────────────────────
 static RouteConfig[] GetRoutes() => new[]
 {
+    // Jour 2 : OrderService DDD (port 5000)
     new RouteConfig
     {
-        RouteId   = "orders-route",
-        ClusterId = "order-cluster",
+        RouteId   = "orders-ddd-route",
+        ClusterId = "order-ddd-cluster",
         Match     = new RouteMatch { Path = "/api/orders/{**catch-all}" }
+    },
+    // Jour 3 : ShopFlow.OrderService simplifié (port 5010)
+    new RouteConfig
+    {
+        RouteId   = "orders-async-route",
+        ClusterId = "order-async-cluster",
+        Match     = new RouteMatch { Path = "/async/orders/{**catch-all}" }
+    },
+    // Saga : interroger l'état d'une commande
+    new RouteConfig
+    {
+        RouteId   = "sagas-route",
+        ClusterId = "orchestration-cluster",
+        Match     = new RouteMatch { Path = "/api/sagas/{**catch-all}" }
     },
     new RouteConfig
     {
         RouteId   = "products-route",
         ClusterId = "product-cluster",
         Match     = new RouteMatch { Path = "/api/products/{**catch-all}" }
-    },
-    new RouteConfig
-    {
-        RouteId   = "payments-route",
-        ClusterId = "payment-cluster",
-        Match     = new RouteMatch { Path = "/api/payments/{**catch-all}" }
     }
 };
 
-// ── Configuration des Clusters ────────────────────────────────────────────────
-
+// ── Clusters ──────────────────────────────────────────────────────────
 static ClusterConfig[] GetClusters() => new[]
 {
     new ClusterConfig
     {
-        ClusterId           = "order-cluster",
-        LoadBalancingPolicy = "RoundRobin",
-        HealthCheck         = new HealthCheckConfig
+        ClusterId = "order-ddd-cluster",
+        HealthCheck = new HealthCheckConfig
         {
             Active = new ActiveHealthCheckConfig
             {
@@ -112,36 +98,49 @@ static ClusterConfig[] GetClusters() => new[]
         },
         Destinations = new Dictionary<string, DestinationConfig>
         {
-            // En développement : une seule instance
-            ["order-1"] = new DestinationConfig { Address = "http://localhost:5000" }
-
-            // En production (load balancing) :
-            // ["order-2"] = new DestinationConfig { Address = "http://localhost:5002" }
+            ["order-ddd-1"] = new DestinationConfig { Address = "http://localhost:5000" }
+        }
+    },
+    new ClusterConfig
+    {
+        ClusterId = "order-async-cluster",
+        HealthCheck = new HealthCheckConfig
+        {
+            Active = new ActiveHealthCheckConfig
+            {
+                Enabled  = true,
+                Interval = TimeSpan.FromSeconds(30),
+                Path     = "/health"
+            }
+        },
+        Destinations = new Dictionary<string, DestinationConfig>
+        {
+            ["order-async-1"] = new DestinationConfig { Address = "http://localhost:5010" }
+        }
+    },
+    new ClusterConfig
+    {
+        ClusterId = "orchestration-cluster",
+        HealthCheck = new HealthCheckConfig
+        {
+            Active = new ActiveHealthCheckConfig
+            {
+                Enabled  = true,
+                Interval = TimeSpan.FromSeconds(30),
+                Path     = "/health"
+            }
+        },
+        Destinations = new Dictionary<string, DestinationConfig>
+        {
+            ["orchestration-1"] = new DestinationConfig { Address = "http://localhost:5020" }
         }
     },
     new ClusterConfig
     {
         ClusterId    = "product-cluster",
-        HealthCheck  = new HealthCheckConfig
-        {
-            Active = new ActiveHealthCheckConfig
-            {
-                Enabled  = true,
-                Interval = TimeSpan.FromSeconds(30),
-                Path     = "/health"
-            }
-        },
         Destinations = new Dictionary<string, DestinationConfig>
         {
             ["product-1"] = new DestinationConfig { Address = "http://localhost:3002" }
-        }
-    },
-    new ClusterConfig
-    {
-        ClusterId    = "payment-cluster",
-        Destinations = new Dictionary<string, DestinationConfig>
-        {
-            ["payment-1"] = new DestinationConfig { Address = "http://localhost:3003" }
         }
     }
 };

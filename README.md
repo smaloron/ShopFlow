@@ -1,107 +1,70 @@
-# ShopFlow — Jour 2 : MediatR, YARP, Refit, gRPC
+# ShopFlow — Jour 3 : MassTransit, RabbitMQ et Saga Pattern
 
-## Architecture
+## Architecture complète
 
 ```
-Clients
-  │
-  ▼
-ShopFlow.Gateway :8080          ← YARP Reverse Proxy
-  │  /api/orders  →  :5000
-  │  /api/products → :3002
-  │  /api/payments → :3003
-  │
-  ├─► OrderService.Presentation :5000
-  │     │  IMediator (MediatR)
-  │     │  LoggingBehavior → ValidationBehavior → Handler
-  │     │
-  │     ├─► OrderService.Application
-  │     │     Commands, Queries, Validators, Behaviors
-  │     │     IProductServiceClient (Refit → :3002)
-  │     │
-  │     ├─► OrderService.Infrastructure
-  │     │     EF Core SQLite
-  │     │
-  │     └─► ShopFlow.Payment.Grpc :5001  (gRPC)
-  │
-  └─► ShopFlow.Payment.Grpc :5001       ← Serveur gRPC
+┌─ YARP Gateway :8080 ──────────────────────────────────┐
+│  /api/orders   → OrderService.DDD  :5000               │
+│  /async/orders → ShopFlow.OrderSvc :5010               │
+│  /api/sagas    → Orchestration     :5020               │
+└────────────────────────────────────────────────────────┘
+                         │ RabbitMQ :5672
+         ┌───────────────┼───────────────────┐
+         ▼               ▼                   ▼
+  ShopFlow.OrderService  ShopFlow.Orchestration  ShopFlow.PaymentService
+  publie OrderPlaced     Saga State Machine       consumer PaymentRequested
+         │               │                   │
+         └───────────────┴───────────────────┴──► ShopFlow.NotificationService
+                                                   consumer OrderConfirmed (ex. 5)
 ```
 
-## Lancer les services
-
-### Terminal 1 — Payment gRPC Service
-```bash
-cd ShopFlow.Payment.Grpc
-dotnet run
-# → écoute sur http://localhost:5001
-```
-
-### Terminal 2 — Order Service
-```bash
-cd OrderService.Presentation
-dotnet run
-# → écoute sur http://localhost:5000
-# → Swagger UI : http://localhost:5000
-```
-
-### Terminal 3 — API Gateway
-```bash
-cd ShopFlow.Gateway
-dotnet run
-# → écoute sur http://localhost:8080
-# → route /api/orders vers localhost:5000
-```
-
-## Nouvelles fonctionnalités (Jour 2)
-
-### MediatR
-- `IMediator.Send()` dans `OrdersController` — une seule dépendance
-- `LoggingBehavior<,>` — log durée de chaque requête
-- `ValidationBehavior<,>` — FluentValidation avant chaque handler
-- `CreateOrderCommandValidator` — règles de validation
-
-### YARP Gateway
-- Point d'entrée unique : `http://localhost:8080`
-- Rate Limiting : 100 req/min
-- Health checks actifs (ping /health de chaque service)
-- RoundRobin load balancing configuré
-
-### Refit (client HTTP)
-- `IProductServiceClient` — vérifie le stock avant création commande
-- Appel automatique vers `http://localhost:3002/api/products/{id}/stock`
-- Dégradé gracieux si Product Service indisponible
-
-### gRPC Payment Service
-- `POST /api/orders/{id}/payment` → appel gRPC → `PaymentServiceImpl`
-- Commande marquée comme `Paid` si paiement accepté
-- `LoggingInterceptor` sur le client
-- Gestion des `RpcException` (Unavailable, InvalidArgument)
-
-## Tests rapides (curl)
+## Démarrage
 
 ```bash
-# 1. Créer une commande (via Gateway)
-curl -X POST http://localhost:8080/api/orders \
+# 1. RabbitMQ (Docker requis)
+docker-compose up -d rabbitmq
+# Management UI → http://localhost:15672  (guest / guest)
+
+# 2. Orchestration (Saga — démarrer EN PREMIER)
+cd ShopFlow.Orchestration && dotnet run       # :5020
+
+# 3. Payment Service
+cd ShopFlow.PaymentService && dotnet run      # :5030
+
+# 4. Notification Service (exercice 5)
+cd ShopFlow.NotificationService && dotnet run # :5040
+
+# 5. Order Service async
+cd ShopFlow.OrderService && dotnet run        # Swagger :5010
+
+# 6. Gateway
+cd ShopFlow.Gateway && dotnet run             # :8080
+```
+
+## Tests rapides
+
+```bash
+# Créer une commande (succès — montant < 1000 €)
+curl -X POST http://localhost:8080/async/orders \
   -H "Content-Type: application/json" \
-  -d '{
-    "customerId": "123e4567-e89b-12d3-a456-426614174000",
-    "productId":  "789e4567-e89b-12d3-a456-426614174000",
-    "quantity": 2, "unitPrice": 29.99, "currency": "EUR"
-  }'
+  -d '{"customerId":"3fa85f64-5717-4562-b3fc-2c963f66afa6","items":[{"productId":"3fa85f64-5717-4562-b3fc-2c963f66afa7","quantity":2,"unitPrice":49.99}]}'
 
-# 2. Récupérer la commande
-curl http://localhost:8080/api/orders/{orderId}
-
-# 3. Payer la commande (gRPC en coulisse)
-curl -X POST http://localhost:8080/api/orders/{orderId}/payment \
+# Créer une commande (échec — montant > 1000 €)
+curl -X POST http://localhost:8080/async/orders \
   -H "Content-Type: application/json" \
-  -d '{"amount": 59.98, "currency": "EUR"}'
+  -d '{"customerId":"3fa85f64-5717-4562-b3fc-2c963f66afa6","items":[{"productId":"3fa85f64-5717-4562-b3fc-2c963f66afa7","quantity":10,"unitPrice":150.00}]}'
 
-# 4. Tester la validation FluentValidation (quantity invalide)
-curl -X POST http://localhost:8080/api/orders \
-  -H "Content-Type: application/json" \
-  -d '{"customerId": "123e4567-e89b-12d3-a456-426614174000",
-       "productId": "789e4567-e89b-12d3-a456-426614174000",
-       "quantity": -1, "unitPrice": 29.99, "currency": "EUR"}'
-# → 400 avec le détail des erreurs de validation
+# Interroger l'état de la Saga
+curl http://localhost:8080/api/sagas/{orderId}
+curl http://localhost:8080/api/sagas
 ```
+
+## Nouveautés Jour 3
+
+- **ShopFlow.Contracts** — 6 événements partagés (records immuables)
+- **ShopFlow.OrderService** — publie OrderPlaced, retourne 202 Accepted
+- **ShopFlow.Orchestration** — Saga State Machine + SQLite + timeout 5 min
+- **ShopFlow.PaymentService** — consumer avec retry policy (ex. 4)
+- **ShopFlow.NotificationService** — consumer OrderConfirmed (ex. 5 — Open/Closed)
+- **OrderService.Presentation** — intégré MassTransit, publie OrderPlaced
+- **docker-compose.yml** — RabbitMQ avec Management UI

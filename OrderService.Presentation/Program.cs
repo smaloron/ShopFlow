@@ -1,12 +1,11 @@
 using FluentValidation;
+using MassTransit;
 using MediatR;
 using OrderService.Application.Behaviors;
 using OrderService.Application.Clients;
 using OrderService.Infrastructure;
 using OrderService.Infrastructure.Persistence;
 using Refit;
-
-// ── BUILDER ───────────────────────────────────────────────────────────────────
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -19,33 +18,27 @@ builder.Services.AddSwaggerGen(options =>
     {
         Title       = "Order Service API",
         Version     = "v1",
-        Description = "API REST — DDD, CQRS, MediatR, Refit, gRPC (Jour 2)"
+        Description = "DDD, CQRS, MediatR, Refit, gRPC, MassTransit (Jour 2+3)"
     });
 });
 
-// ── Infrastructure (DbContext + Repository) ───────────────────────────────────
+// ── Infrastructure ────────────────────────────────────────────────────
 builder.Services.AddInfrastructure(builder.Configuration);
 
-// ── MediatR + Pipeline Behaviors ─────────────────────────────────────────────
+// ── MediatR + Behaviors ───────────────────────────────────────────────
 builder.Services.AddMediatR(cfg =>
 {
-    // Découvre automatiquement tous les IRequestHandler du projet Application
     cfg.RegisterServicesFromAssembly(typeof(OrderService.Application.Commands.CreateOrderCommand).Assembly);
-
-    // Découvre aussi les handlers de la couche Presentation (ex: ProcessPaymentCommandHandler)
     cfg.RegisterServicesFromAssembly(typeof(Program).Assembly);
-
-    // Pipeline : LoggingBehavior → ValidationBehavior → Handler
-    // (ordre d'ajout = ordre d'exécution)
     cfg.AddBehavior(typeof(IPipelineBehavior<,>), typeof(LoggingBehavior<,>));
     cfg.AddBehavior(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
 });
 
-// ── FluentValidation : découverte automatique des validateurs ─────────────────
+// ── FluentValidation ──────────────────────────────────────────────────
 builder.Services.AddValidatorsFromAssembly(
     typeof(OrderService.Application.Commands.CreateOrderCommandValidator).Assembly);
 
-// ── Refit : client HTTP vers le Product Service ───────────────────────────────
+// ── Refit — Product Service ───────────────────────────────────────────
 builder.Services
     .AddRefitClient<IProductServiceClient>()
     .ConfigureHttpClient(c =>
@@ -54,52 +47,61 @@ builder.Services
             builder.Configuration["Services:ProductService"] ?? "http://localhost:3002");
     });
 
-// ── gRPC : client vers le Payment Service ────────────────────────────────────
+// ── gRPC — Payment Service ────────────────────────────────────────────
 builder.Services.AddGrpcClient<ShopFlow.Payment.Grpc.PaymentService.PaymentServiceClient>(o =>
 {
     o.Address = new Uri(
         builder.Configuration["Services:PaymentGrpc"] ?? "http://localhost:5001");
 });
 
-// ── Health Checks ─────────────────────────────────────────────────────────────
+// ── MassTransit + RabbitMQ (Jour 3) ──────────────────────────────────
+// L'OrderService.Presentation publie OrderPlaced après chaque création
+builder.Services.AddMassTransit(x =>
+{
+    x.UsingRabbitMq((context, cfg) =>
+    {
+        var host     = builder.Configuration["RabbitMQ:Host"]     ?? "localhost";
+        var user     = builder.Configuration["RabbitMQ:Username"] ?? "guest";
+        var password = builder.Configuration["RabbitMQ:Password"] ?? "guest";
+
+        cfg.Host(host, "/", h =>
+        {
+            h.Username(user);
+            h.Password(password);
+        });
+
+        cfg.ConfigureEndpoints(context);
+    });
+});
+
+// ── Health Checks ─────────────────────────────────────────────────────
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<OrderDbContext>();
 
-// ── CORS ──────────────────────────────────────────────────────────────────────
 builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowAll", policy =>
-        policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
-});
-
-// ── APP ───────────────────────────────────────────────────────────────────────
+    options.AddPolicy("AllowAll", p =>
+        p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));
 
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
-    app.UseSwaggerUI(options =>
-    {
-        options.SwaggerEndpoint("/swagger/v1/swagger.json", "Order Service API v1");
-        options.RoutePrefix = string.Empty;
-    });
+    app.UseSwaggerUI(o => { o.RoutePrefix = string.Empty; });
 }
 
-app.UseHttpsRedirection();
 app.UseCors("AllowAll");
 app.UseAuthorization();
 app.MapControllers();
-app.MapHealthChecks("/health"); // Utilisé par YARP pour le health checking
+app.MapHealthChecks("/health");
 
-// Initialisation DB
 using (var scope = app.Services.CreateScope())
 {
     try
     {
         var context = scope.ServiceProvider.GetRequiredService<OrderDbContext>();
         await context.Database.EnsureCreatedAsync();
-        Console.WriteLine("✅ Base de données initialisée");
+        Console.WriteLine("✅ [OrderService.Presentation] Base de données initialisée");
     }
     catch (Exception ex)
     {
