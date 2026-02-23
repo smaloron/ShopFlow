@@ -1,0 +1,1 @@
+Shopflow est une application microservices .NET dont l'objet est d'illustrer le plus simplement possible les bonnes pratiques. 
