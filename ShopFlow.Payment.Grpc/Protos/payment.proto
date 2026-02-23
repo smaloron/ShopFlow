@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+option csharp_namespace = "ShopFlow.Payment.Grpc";
+
+package payment;
+
+// ── Service ───────────────────────────────────────────────────────────
+
+service PaymentService {
+  // Unary : traitement d'un paiement (une requête → une réponse)
+  rpc ProcessPayment (PaymentRequest) returns (PaymentResponse);
+
+  // Unary : remboursement d'une commande
+  rpc RefundPayment (RefundRequest) returns (PaymentResponse);
+}
+
+// ── Messages ──────────────────────────────────────────────────────────
+
+message PaymentRequest {
+  string order_id  = 1;
+  double amount    = 2;
+  string currency  = 3;
+  string method    = 4; // CARD, PAYPAL, etc.
+}
+
+message RefundRequest {
+  string order_id       = 1;
+  string transaction_id = 2;
+  double amount         = 3;
+}
+
+message PaymentResponse {
+  bool   success        = 1;
+  string transaction_id = 2;
+  string error_message  = 3;
+  PaymentStatus status  = 4;
+}
+
+// ── Enums ─────────────────────────────────────────────────────────────
+
+enum PaymentStatus {
+  UNSPECIFIED = 0;
+  PENDING     = 1;
+  COMPLETED   = 2;
+  FAILED      = 3;
+  REFUNDED    = 4;
+}

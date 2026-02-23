@@ -1,11 +1,13 @@
 namespace OrderService.Application.Queries;
 
+using MediatR;
 using OrderService.Domain.Repositories;
 using OrderService.Domain.ValueObjects;
 
 // ── DTOs ──────────────────────────────────────────────────────────────
 
-public record CalculateRefundQuery(Guid OrderId, decimal RefundAmount, string Currency);
+public record CalculateRefundQuery(Guid OrderId, decimal RefundAmount, string Currency)
+    : IRequest<RefundResultDto>;
 
 public record RefundResultDto(decimal RemainingAmount, string Currency, bool IsFullyRefunded);
 
@@ -15,16 +17,16 @@ public record RefundResultDto(decimal RemainingAmount, string Currency, bool IsF
 /// Handler de calcul de remboursement partiel.
 /// C'est une Query (pas de modification en DB).
 /// </summary>
-public class CalculateRefundQueryHandler
+public class CalculateRefundQueryHandler : IRequestHandler<CalculateRefundQuery, RefundResultDto>
 {
     private readonly IOrderRepository _repository;
 
     public CalculateRefundQueryHandler(IOrderRepository repository)
         => _repository = repository;
 
-    public async Task<RefundResultDto> HandleAsync(CalculateRefundQuery query)
+    public async Task<RefundResultDto> Handle(CalculateRefundQuery query, CancellationToken cancellationToken)
     {
-        var order = await _repository.GetByIdAsync(query.OrderId)
+        var order = await _repository.GetByIdAsync(query.OrderId, cancellationToken)
             ?? throw new KeyNotFoundException($"Commande {query.OrderId} introuvable.");
 
         var refund    = new Money(query.RefundAmount, query.Currency);

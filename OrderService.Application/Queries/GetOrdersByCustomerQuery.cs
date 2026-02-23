@@ -1,26 +1,28 @@
 namespace OrderService.Application.Queries;
 
+using MediatR;
 using OrderService.Application.Dtos;
 using OrderService.Domain.Repositories;
 
 // ── Query ─────────────────────────────────────────────────────────────
 
 /// <summary>Query pour récupérer toutes les commandes d'un client</summary>
-public record GetOrdersByCustomerQuery(Guid CustomerId);
+public record GetOrdersByCustomerQuery(Guid CustomerId) : IRequest<IEnumerable<OrderSummaryDto>>;
 
 // ── Handler ───────────────────────────────────────────────────────────
 
-/// <summary>Handler — retourne une liste de résumés de commandes</summary>
-public class GetOrdersByCustomerQueryHandler
+public class GetOrdersByCustomerQueryHandler : IRequestHandler<GetOrdersByCustomerQuery, IEnumerable<OrderSummaryDto>>
 {
     private readonly IOrderRepository _repository;
 
     public GetOrdersByCustomerQueryHandler(IOrderRepository repository)
         => _repository = repository;
 
-    public async Task<IEnumerable<OrderSummaryDto>> HandleAsync(GetOrdersByCustomerQuery query)
+    public async Task<IEnumerable<OrderSummaryDto>> Handle(
+        GetOrdersByCustomerQuery query,
+        CancellationToken cancellationToken)
     {
-        var orders = await _repository.GetByCustomerIdAsync(query.CustomerId);
+        var orders = await _repository.GetByCustomerIdAsync(query.CustomerId, cancellationToken);
 
         return orders.Select(o => new OrderSummaryDto(
             o.Id,

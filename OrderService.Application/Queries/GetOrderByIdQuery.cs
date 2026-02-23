@@ -1,20 +1,21 @@
 namespace OrderService.Application.Queries;
 
+using MediatR;
 using OrderService.Application.Dtos;
 using OrderService.Domain.Repositories;
 
 // ── Query ─────────────────────────────────────────────────────────────
 
 /// <summary>Query pour récupérer une commande par son ID</summary>
-public record GetOrderByIdQuery(Guid OrderId);
+public record GetOrderByIdQuery(Guid OrderId) : IRequest<OrderDto?>;
 
 // ── Handler ───────────────────────────────────────────────────────────
 
 /// <summary>
-/// Handler pour traiter la query GetOrderById.
+/// Handler MediatR pour GetOrderByIdQuery.
 /// Responsable de mapper l'entité Domain vers un DTO.
 /// </summary>
-public class GetOrderByIdQueryHandler
+public class GetOrderByIdQueryHandler : IRequestHandler<GetOrderByIdQuery, OrderDto?>
 {
     private readonly IOrderRepository _orderRepository;
 
@@ -23,18 +24,13 @@ public class GetOrderByIdQueryHandler
         _orderRepository = orderRepository ?? throw new ArgumentNullException(nameof(orderRepository));
     }
 
-    /// <summary>Traite la query et retourne le DTO, ou null si non trouvé</summary>
-    public async Task<OrderDto?> Handle(
-        GetOrderByIdQuery query,
-        CancellationToken cancellationToken = default)
+    public async Task<OrderDto?> Handle(GetOrderByIdQuery query, CancellationToken cancellationToken)
     {
-        // 1. Récupération
         var order = await _orderRepository.GetByIdAsync(query.OrderId, cancellationToken);
 
         if (order == null)
             return null;
 
-        // 2. Mapping / Projection vers DTO
         return new OrderDto
         {
             Id          = order.Id,

@@ -7,8 +7,16 @@
   <ItemGroup>
     <ProjectReference Include="..\OrderService.Application\OrderService.Application.csproj" />
     <ProjectReference Include="..\OrderService.Infrastructure\OrderService.Infrastructure.csproj" />
+    <ProjectReference Include="..\ShopFlow.Payment.Grpc\ShopFlow.Payment.Grpc.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
+    <PackageReference Include="Refit.HttpClientFactory" Version="7.0.0" />
+    <PackageReference Include="Grpc.Net.Client" Version="2.60.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Diagnostics.HealthChecks" Version="2.2.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Client gRPC vers Payment.Grpc — utilise le .proto du projet serveur -->
+    <Protobuf Include="..\ShopFlow.Payment.Grpc\Protos\payment.proto" GrpcServices="Client" />
   </ItemGroup>
 </Project>

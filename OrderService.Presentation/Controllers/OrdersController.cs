@@ -1,5 +1,7 @@
 namespace OrderService.Presentation.Controllers;
 
+using FluentValidation;
+using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using OrderService.Application.Commands;
 using OrderService.Application.Dtos;
@@ -7,37 +9,21 @@ using OrderService.Application.Queries;
 
 /// <summary>
 /// Contrôleur REST pour gérer les commandes.
-/// Responsabilités : validation HTTP, délégation aux Handlers, codes HTTP.
+/// Jour 2 : utilise IMediator au lieu d'injecter chaque Handler directement.
+/// Une seule dépendance — découplage maximal.
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
 public class OrdersController : ControllerBase
 {
-    private readonly CreateOrderCommandHandler       _createOrderHandler;
-    private readonly GetOrderByIdQueryHandler        _getOrderByIdHandler;
-    private readonly CancelOrderCommandHandler       _cancelHandler;
-    private readonly GetOrdersByCustomerQueryHandler _getByCustomerHandler;
-    private readonly CalculateRefundQueryHandler     _refundHandler;
+    private readonly IMediator _mediator;
 
-    public OrdersController(
-        CreateOrderCommandHandler       createOrderHandler,
-        GetOrderByIdQueryHandler        getOrderByIdHandler,
-        CancelOrderCommandHandler       cancelHandler,
-        GetOrdersByCustomerQueryHandler getByCustomerHandler,
-        CalculateRefundQueryHandler     refundHandler)
-    {
-        _createOrderHandler   = createOrderHandler   ?? throw new ArgumentNullException(nameof(createOrderHandler));
-        _getOrderByIdHandler  = getOrderByIdHandler  ?? throw new ArgumentNullException(nameof(getOrderByIdHandler));
-        _cancelHandler        = cancelHandler        ?? throw new ArgumentNullException(nameof(cancelHandler));
-        _getByCustomerHandler = getByCustomerHandler ?? throw new ArgumentNullException(nameof(getByCustomerHandler));
-        _refundHandler        = refundHandler        ?? throw new ArgumentNullException(nameof(refundHandler));
-    }
+    public OrdersController(IMediator mediator)
+        => _mediator = mediator ?? throw new ArgumentNullException(nameof(mediator));
 
     // ── POST /api/orders ─────────────────────────────────────────────────
 
     /// <summary>Crée une nouvelle commande</summary>
-    /// <response code="201">Commande créée avec succès</response>
-    /// <response code="400">Données invalides ou règle métier violée</response>
     [HttpPost]
     [ProducesResponseType(typeof(CreateOrderResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -47,15 +33,21 @@ public class OrdersController : ControllerBase
     {
         try
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
-
-            var orderId = await _createOrderHandler.Handle(command, cancellationToken);
+            var orderId = await _mediator.Send(command, cancellationToken);
 
             return CreatedAtAction(
                 nameof(GetOrderById),
                 new { id = orderId },
                 new CreateOrderResponse { OrderId = orderId });
+        }
+        catch (ValidationException ex)
+        {
+            // Erreurs FluentValidation → 400 avec le détail de chaque règle
+            return BadRequest(new
+            {
+                error  = "Données invalides.",
+                errors = ex.Errors.Select(e => new { field = e.PropertyName, message = e.ErrorMessage })
+            });
         }
         catch (ArgumentException ex)
         {
@@ -65,17 +57,19 @@ public class OrdersController : ControllerBase
         {
             return BadRequest(new { error = ex.Message });
         }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { error = ex.Message });
+        }
         catch
         {
-            return StatusCode(500, new { error = "Une erreur inattendue s'est produite" });
+            return StatusCode(500, new { error = "Une erreur inattendue s'est produite." });
         }
     }
 
     // ── GET /api/orders/{id} ─────────────────────────────────────────────
 
     /// <summary>Récupère une commande par son identifiant</summary>
-    /// <response code="200">Commande trouvée</response>
-    /// <response code="404">Commande introuvable</response>
     [HttpGet("{id:guid}")]
     [ProducesResponseType(typeof(OrderDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -83,50 +77,38 @@ public class OrdersController : ControllerBase
         [FromRoute] Guid id,
         CancellationToken cancellationToken)
     {
-        try
-        {
-            var query    = new GetOrderByIdQuery(id);
-            var orderDto = await _getOrderByIdHandler.Handle(query, cancellationToken);
+        var orderDto = await _mediator.Send(new GetOrderByIdQuery(id), cancellationToken);
 
-            if (orderDto == null)
-                return NotFound(new { error = $"Commande {id} introuvable" });
-
-            return Ok(orderDto);
-        }
-        catch
-        {
-            return StatusCode(500, new { error = "Une erreur inattendue s'est produite" });
-        }
+        return orderDto is null
+            ? NotFound(new { error = $"Commande {id} introuvable." })
+            : Ok(orderDto);
     }
 
     // ── GET /api/orders?customerId={guid} ────────────────────────────────
 
-    /// <summary>Récupère toutes les commandes d'un client (exercice 3)</summary>
+    /// <summary>Récupère toutes les commandes d'un client</summary>
     [HttpGet]
     [ProducesResponseType(typeof(IEnumerable<OrderSummaryDto>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetByCustomer([FromQuery] Guid customerId)
+    public async Task<IActionResult> GetByCustomer(
+        [FromQuery] Guid customerId,
+        CancellationToken cancellationToken)
     {
-        var query  = new GetOrdersByCustomerQuery(customerId);
-        var result = await _getByCustomerHandler.HandleAsync(query);
+        var result = await _mediator.Send(new GetOrdersByCustomerQuery(customerId), cancellationToken);
         return Ok(result);
     }
 
     // ── DELETE /api/orders/{id} ──────────────────────────────────────────
 
-    /// <summary>Annule une commande (exercice 2)</summary>
-    /// <response code="204">Commande annulée</response>
-    /// <response code="400">Annulation impossible (état terminal)</response>
-    /// <response code="404">Commande introuvable</response>
+    /// <summary>Annule une commande</summary>
     [HttpDelete("{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> CancelOrder(Guid id)
+    public async Task<IActionResult> CancelOrder(Guid id, CancellationToken cancellationToken)
     {
         try
         {
-            var command = new CancelOrderCommand(id);
-            await _cancelHandler.HandleAsync(command);
+            await _mediator.Send(new CancelOrderCommand(id), cancellationToken);
             return NoContent();
         }
         catch (KeyNotFoundException ex)
@@ -141,17 +123,21 @@ public class OrdersController : ControllerBase
 
     // ── POST /api/orders/{id}/refund ─────────────────────────────────────
 
-    /// <summary>Calcule le montant restant après remboursement partiel (exercice 5)</summary>
+    /// <summary>Calcule le montant restant après remboursement partiel</summary>
     [HttpPost("{id:guid}/refund")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> CalculateRefund(Guid id, [FromBody] RefundRequest request)
+    public async Task<IActionResult> CalculateRefund(
+        Guid id,
+        [FromBody] RefundRequest request,
+        CancellationToken cancellationToken)
     {
         try
         {
-            var query  = new CalculateRefundQuery(id, request.Amount, request.Currency);
-            var result = await _refundHandler.HandleAsync(query);
+            var result = await _mediator.Send(
+                new CalculateRefundQuery(id, request.Amount, request.Currency),
+                cancellationToken);
             return Ok(result);
         }
         catch (KeyNotFoundException ex)
