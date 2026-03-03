@@ -9,6 +9,7 @@ using OrderService.Application.Dtos;
 using OrderService.Application.Queries;
 using OrderService.Domain.Repositories;
 using ShopFlow.Contracts.Events;
+using ShopFlow.Contracts.Events;
 
 /// <summary>
 /// Contrôleur REST.
@@ -63,8 +64,8 @@ public class OrdersController : ControllerBase
                     OrderId     = order.Id,
                     CustomerId  = order.CustomerId,
                     TotalAmount = order.TotalAmount.Amount,
-                    OrderDate   = order.OrderDate,
-                    Items       = order.Items.Select(i => new Contracts.Events.OrderItem
+                    OrderDate   = order.OrderDate.DateTime,
+                    Items       = order.Items.Select(i => new ShopFlow.Contracts.Events.OrderItem
                     {
                         ProductId = i.ProductId,
                         Quantity  = i.Quantity,
