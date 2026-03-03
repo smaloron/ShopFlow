@@ -1,5 +1,6 @@
 namespace OrderService.Application.Notifications;
 using MediatR;
+using Microsoft.Extensions.Logging;
 
 public record OrderPlacedNotification(Guid OrderId, Guid CustomerId, decimal TotalAmount, string Currency) : INotification;
 
