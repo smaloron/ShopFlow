@@ -22,7 +22,7 @@ public class OrderRepository : IOrderRepository
     public async Task<Order?> GetByIdAsync(Guid orderId, CancellationToken cancellationToken = default)
     {
         return await _context.Orders
-            .Include("_items")  // Eager loading du backing field privé
+            .Include(o => o.Items)  // Eager loading du backing field privé
             .FirstOrDefaultAsync(o => o.Id == orderId, cancellationToken);
     }
 
@@ -31,9 +31,9 @@ public class OrderRepository : IOrderRepository
         CancellationToken cancellationToken = default)
     {
         return await _context.Orders
-            .Include("_items")
+            .Include(o => o.Items)
             .Where(o => o.CustomerId == customerId)
-            .OrderByDescending(o => o.OrderDate)
+            .OrderByDescending(o => o.OrderDate.ToString())
             .ToListAsync(cancellationToken);
     }
 
