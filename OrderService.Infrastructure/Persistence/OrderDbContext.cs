@@ -43,10 +43,13 @@ public class OrderDbContext : DbContext
 
         // Relation Order → OrderItems via le backing field privé _items
         orderEntity
-            .HasMany<OrderItem>("_items")
+            .HasMany(o => o.Items)
             .WithOne()
             .HasForeignKey("OrderId")
             .OnDelete(DeleteBehavior.Cascade);
+
+        orderEntity.Navigation("Items")
+            .UsePropertyAccessMode(PropertyAccessMode.Field);
 
         // Les DomainEvents ne sont pas persistés
         orderEntity.Ignore(o => o.DomainEvents);
