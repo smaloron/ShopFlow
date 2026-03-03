@@ -4,19 +4,44 @@ using OrderService.Domain.Entities;
 using OrderService.Domain.Repositories;
 using OrderService.Infrastructure.Persistence;
 
+/// <summary>
+/// Implémentation du repository Order utilisant Entity Framework Core.
+/// </summary>
 public class OrderRepository : IOrderRepository
 {
     private readonly OrderDbContext _context;
-    public OrderRepository(OrderDbContext context) => _context = context ?? throw new ArgumentNullException(nameof(context));
+
+    public OrderRepository(OrderDbContext context)
+    {
+        _context = context ?? throw new ArgumentNullException(nameof(context));
+    }
+
+    // ── LECTURE ───────────────────────────────────────────────────────────
 
     public async Task<Order?> GetByIdAsync(Guid orderId, CancellationToken cancellationToken = default)
-        => await _context.Orders.Include("_items").FirstOrDefaultAsync(o => o.Id == orderId, cancellationToken);
+    {
+        return await _context.Orders
+            .Include(o => o.Items)  // Eager loading du backing field privé
+            .FirstOrDefaultAsync(o => o.Id == orderId, cancellationToken);
+    }
 
-    public async Task<List<Order>> GetByCustomerIdAsync(Guid customerId, CancellationToken cancellationToken = default)
-        => await _context.Orders.Include("_items").Where(o => o.CustomerId == customerId).OrderByDescending(o => o.OrderDate).ToListAsync(cancellationToken);
+    public async Task<List<Order>> GetByCustomerIdAsync(
+        Guid customerId,
+        CancellationToken cancellationToken = default)
+    {
+        return await _context.Orders
+            .Include(o => o.Items)
+            .Where(o => o.CustomerId == customerId)
+            .OrderByDescending(o => o.OrderDate.ToString())
+            .ToListAsync(cancellationToken);
+    }
+
+    // ── ÉCRITURE ──────────────────────────────────────────────────────────
 
     public async Task AddAsync(Order order, CancellationToken cancellationToken = default)
-        => await _context.Orders.AddAsync(order, cancellationToken);
+    {
+        await _context.Orders.AddAsync(order, cancellationToken);
+    }
 
     public Task UpdateAsync(Order order, CancellationToken cancellationToken = default)
     {
@@ -30,6 +55,10 @@ public class OrderRepository : IOrderRepository
         return Task.CompletedTask;
     }
 
+    // ── UNIT OF WORK ──────────────────────────────────────────────────────
+
     public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
-        => await _context.SaveChangesAsync(cancellationToken);
+    {
+        return await _context.SaveChangesAsync(cancellationToken);
+    }
 }
