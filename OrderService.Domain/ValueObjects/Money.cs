@@ -6,11 +6,19 @@ namespace OrderService.Domain.ValueObjects;
 /// </summary>
 /// <param name="Amount">Le montant (doit être >= 0)</param>
 /// <param name="Currency">Code devise ISO 4217 (ex: EUR, USD, GBP)</param>
-public record Money(decimal Amount, string Currency)
+public record Money
 {
+    
+    public decimal  Amount  { get; private set;}
+    public string Currency { get; private set;}
+    
     // Compact constructor — s'exécute après l'assignation des propriétés primaires
-    public Money
+    public Money(decimal amount, string currency)
     {
+        
+        this.Amount = amount;
+        this.Currency = currency;
+        
         // Règle 1 : Le montant ne peut pas être négatif
         if (Amount < 0)
             throw new ArgumentException(
