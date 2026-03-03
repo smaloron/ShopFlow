@@ -1,6 +1,7 @@
 namespace OrderService.Application.Notifications;
 
 using MediatR;
+using Microsoft.Extensions.Logging;
 
 /// <summary>
 /// Notification MediatR publiée après confirmation d'une commande.
