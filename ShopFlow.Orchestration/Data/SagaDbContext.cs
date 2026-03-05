@@ -1,5 +1,6 @@
 namespace ShopFlow.Orchestration.Data;
 
+using MassTransit;
 using MassTransit.EntityFrameworkCoreIntegration;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -9,12 +10,11 @@ using ShopFlow.Orchestration.Sagas;
 /// DbContext dédié à la persistance de l'état de la Saga.
 /// Hérite de SagaDbContext (MassTransit) pour la configuration automatique.
 /// </summary>
-public class SagaDbContext : SagaDbContext
+public class OrderSagaDbContext : SagaDbContext
 {
-    public SagaDbContext(DbContextOptions<SagaDbContext> options)
+    public OrderSagaDbContext(DbContextOptions<OrderSagaDbContext> options)
         : base(options) { }
 
-    /// <summary>Retourne le mapping EF Core pour OrderSagaState</summary>
     protected override IEnumerable<ISagaClassMap> Configurations
     {
         get { yield return new OrderSagaStateMap(); }

@@ -6,7 +6,7 @@ using ShopFlow.Orchestration.Sagas;
 var builder = WebApplication.CreateBuilder(args);
 
 // ── Base de données pour l'état de la Saga ────────────────────────────
-builder.Services.AddDbContext<SagaDbContext>(options =>
+builder.Services.AddDbContext<OrderSagaDbContext>(options =>
     options.UseSqlite(
         builder.Configuration.GetConnectionString("SagaDb") ?? "Data Source=saga.db"));
 
@@ -17,7 +17,7 @@ builder.Services.AddMassTransit(x =>
     x.AddSagaStateMachine<OrderSaga, OrderSagaState>()
         .EntityFrameworkRepository(r =>
         {
-            r.ExistingDbContext<SagaDbContext>();
+            r.ExistingDbContext<OrderSagaDbContext>();
             r.UseSqlite();
 
             // Optimistic concurrency pour éviter les doubles traitements
@@ -63,7 +63,7 @@ builder.Services.AddSwaggerGen(o =>
     });
 });
 builder.Services.AddHealthChecks()
-    .AddDbContextCheck<SagaDbContext>();
+    .AddDbContextCheck<OrderSagaDbContext>();
 
 // ── APP ───────────────────────────────────────────────────────────────
 var app = builder.Build();
@@ -78,9 +78,9 @@ app.MapHealthChecks("/health");
 // Créer la base de données au démarrage
 using (var scope = app.Services.CreateScope())
 {
-    var db = scope.ServiceProvider.GetRequiredService<SagaDbContext>();
+    var db = scope.ServiceProvider.GetRequiredService<OrderSagaDbContext>();
     await db.Database.EnsureCreatedAsync();
-    Console.WriteLine("✅ [Orchestration] Base de données Saga prête");
+    Console.WriteLine("[Orchestration] Base de données Saga prête");
 }
 
 app.Run();

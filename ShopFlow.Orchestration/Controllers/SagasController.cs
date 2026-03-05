@@ -12,9 +12,9 @@ using ShopFlow.Orchestration.Data;
 [Route("api/[controller]")]
 public class SagasController : ControllerBase
 {
-    private readonly SagaDbContext _db;
+    private readonly OrderSagaDbContext _db;
 
-    public SagasController(SagaDbContext db) => _db = db;
+    public SagasController(OrderSagaDbContext db) => _db = db;
 
     // ── GET /api/sagas/{orderId} ──────────────────────────────────────
 
