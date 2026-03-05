@@ -46,7 +46,7 @@ public class OrdersController : ControllerBase
             CustomerId = request.CustomerId,
             OrderDate  = DateTime.UtcNow,
             Status     = "Pending",
-            Items      = request.Items.Select(i => new OrderItem
+            Items      = request.Items.Select(i => new Models.OrderItem
             {
                 Id        = Guid.NewGuid(),
                 ProductId = i.ProductId,
