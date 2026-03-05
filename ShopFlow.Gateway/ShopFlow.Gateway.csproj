@@ -6,6 +6,5 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Yarp.ReverseProxy" Version="2.1.0" />
-    <PackageReference Include="Microsoft.AspNetCore.RateLimiting" Version="8.0.0" />
   </ItemGroup>
 </Project>
