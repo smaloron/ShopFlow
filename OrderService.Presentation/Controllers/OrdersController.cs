@@ -9,7 +9,6 @@ using OrderService.Application.Dtos;
 using OrderService.Application.Queries;
 using OrderService.Domain.Repositories;
 using ShopFlow.Contracts.Events;
-using ShopFlow.Contracts.Events;
 
 /// <summary>
 /// Contrôleur REST.
